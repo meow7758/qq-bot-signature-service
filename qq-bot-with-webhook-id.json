@@ -1,0 +1,43 @@
+{
+  "name": "QQ Bot Callback v2",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "qq-bot-wallabag",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "QQ Bot Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "webhookId": "qq-bot-callback-handler"
+    },
+    {
+      "parameters": {
+        "functionCode": "const body = $input.item.json.body;\nconsole.log('Received:', JSON.stringify(body));\nif (body.op === 13) {\n  return {json: {plain_token: body.d.plain_token, signature: body.d.event_ts + 'sig'}};\n}\nreturn {json: {message: 'ok'}};"
+      },
+      "id": "handler",
+      "name": "Handler",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [440, 300]
+    }
+  ],
+  "connections": {
+    "QQ Bot Webhook": {
+      "main": [
+        [
+          {
+            "node": "Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {}
+}

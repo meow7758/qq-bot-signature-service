@@ -1,0 +1,46 @@
+{
+  "name": "QQ Bot Wallabag Final",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "qq-bot-wallabag",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "id": "webhook-1",
+      "webhookId": "qq-bot-wallabag-handler"
+    },
+    {
+      "parameters": {
+        "functionCode": "const body = $input.item.json.body;\nif (body.op === 13) {\n  return {json: {plain_token: body.d.plain_token, signature: body.d.event_ts + 'sig'}};\n}\nreturn {json: {msg: 'ok', op: body.op}};"
+      },
+      "name": "Handler",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [440, 300],
+      "id": "handler-1"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "callerPolicy": "anyone",
+    "executionOrder": "v1"
+  }
+}

@@ -1,0 +1,251 @@
+{
+  "name": "QQ Bot Wallabag v3 - Simplified",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "qq-bot-wallabag",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "QQ Bot Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// QQ 机器人回调处理\n// 简化版本 - 先处理验证，后续再加严格签名校验\n\nconst QQ_BOT_SECRET = 'SYfmu2AJScmx8KWjw9Nbq5Lbs9Rj1Kdx';\n\n// 获取请求数据\nconst body = $input.item.json.body;\nconst headers = $input.item.json.headers || {};\n\nconsole.log('Received request:', JSON.stringify({ op: body.op, t: body.t }));\n\n// 检查是否是回调地址验证请求 (OpCode 13)\nif (body.op === 13) {\n  const plainToken = body.d?.plain_token;\n  const eventTs = body.d?.event_ts;\n  \n  console.log('Validation request - plain_token:', plainToken, 'event_ts:', eventTs);\n  \n  if (!plainToken || !eventTs) {\n    console.log('Missing validation parameters');\n    return {\n      json: {\n        error: 'Missing validation parameters'\n      }\n    };\n  }\n  \n  // 使用 HMAC-SHA256 作为临时解决方案\n  // 组合签名内容: event_ts + plain_token\n  const crypto = require('crypto');\n  const signContent = eventTs + plainToken;\n  const signature = crypto\n    .createHmac('sha256', QQ_BOT_SECRET)\n    .update(signContent)\n    .digest('hex');\n  \n  console.log('Generated signature:', signature);\n  \n  // 返回 QQ 平台要求的格式\n  return {\n    json: {\n      plain_token: plainToken,\n      signature: signature\n    },\n    // 设置响应数据，让 Respond to Webhook 节点返回\n    responseMode: 'onReceived'\n  };\n}\n\n// 常规事件处理 (OpCode 0)\nconsole.log('Event received, op:', body.op, 'type:', body.t);\n\nreturn {\n  json: {\n    verified: true,\n    op: body.op,\n    eventType: body.t,\n    eventData: body.d,\n    rawEvent: body\n  }\n};"
+      },
+      "id": "handle-callback",
+      "name": "Handle Callback",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// 解析 QQ 机器人事件\nconst eventType = $json.eventType;\nconst eventData = $json.eventData;\n\nconsole.log('Parsing event type:', eventType);\n\n// C2C 私聊消息\nif (eventType === 'C2C_MESSAGE_CREATE') {\n  const content = eventData.content || '';\n  const userId = eventData.author?.id || eventDataopenid || '';\n  \n  console.log('C2C message from user:', userId, 'content:', content);\n  \n  return {\n    json: {\n      intent: 'handle_message',\n      content,\n      userId,\n      msgType: 'c2c'\n    }\n  };\n}\n\n// 群 @ 消息\nif (eventType === 'GROUP_AT_MESSAGE_CREATE') {\n  const content = eventData.content || '';\n  const userId = eventData.author?.id || '';\n  const groupId = eventData.group_id || '';\n  \n  console.log('Group @ message from:', userId, 'group:', groupId, 'content:', content);\n  \n  return {\n    json: {\n      intent: 'handle_message',\n      content,\n      userId,\n      groupId,\n      msgType: 'group'\n    }\n  };\n}\n\n// 其他事件类型\nconsole.log('Unhandled event type:', eventType);\nreturn {\n  json: {\n    intent: 'ignore',\n    eventType,\n    data: eventData\n  }\n};"
+      },
+      "id": "parse-event",
+      "name": "Parse Event",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.intent }}",
+              "value2": "handle_message"
+            }
+          ]
+        }
+      },
+      "id": "route-intent",
+      "name": "Route Intent",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [840, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// 解析用户命令\nconst content = $json.content || '';\nlet intent = 'unknown';\nlet url = '';\nlet keyword = '';\n\nconsole.log('Parsing command:', content);\n\n// 检查是否包含链接\nconst urlMatch = content.match(/(https?:\\/\\/[^\\s]+)/);\nif (urlMatch) {\n  intent = 'save';\n  url = urlMatch[1];\n  console.log('Detected save intent, URL:', url);\n} else if (content.includes('搜索') || content.includes('search') || content.includes('查找')) {\n  intent = 'search';\n  keyword = content.replace(/搜索|查找|search/g, '').trim();\n  console.log('Detected search intent, keyword:', keyword);\n}\n\nreturn {\n  json: {\n    intent,\n    url,\n    keyword,\n    content,\n    userId: $json.userId,\n    groupId: $json.groupId,\n    msgType: $json.msgType\n  }\n};"
+      },
+      "id": "parse-command",
+      "name": "Parse Command",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [1040, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.intent }}",
+              "value2": "save"
+            }
+          ]
+        }
+      },
+      "id": "route-command",
+      "name": "Route Command",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [1240, 200]
+    },
+    {
+      "parameters": {
+        "url": "https://wallabag.meowlove.cn/api/entries.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { url: $json.url } }}",
+        "options": {}
+      },
+      "id": "save-wallabag",
+      "name": "Save to Wallabag",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1440, 100],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "wallabag-token",
+          "name": "Wallabag Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://wallabag.meowlove.cn/api/entries",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "search",
+              "value": "={{ $json.keyword }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "search-wallabag",
+      "name": "Search Wallabag",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1440, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  code: 0,\n  message: $json.intent === 'save' ? '✅ 文章已保存到 Wallabag!' : '🔍 搜索完成',\n  timestamp: Math.floor(Date.now() / 1000)\n} }}"
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1640, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  code: 1,\n  message: '❓ 不理解的命令。试试发送链接或「搜索 关键词」'\n} }}"
+      },
+      "id": "respond-unknown",
+      "name": "Respond Unknown",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1440, 400]
+    }
+  ],
+  "connections": {
+    "QQ Bot Webhook": {
+      "main": [
+        [
+          {
+            "node": "Handle Callback",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Handle Callback": {
+      "main": [
+        [
+          {
+            "node": "Parse Event",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Event": {
+      "main": [
+        [
+          {
+            "node": "Route Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Intent": {
+      "main": [
+        [
+          {
+            "node": "Parse Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Command": {
+      "main": [
+        [
+          {
+            "node": "Route Command",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Command": {
+      "main": [
+        [
+          {
+            "node": "Save to Wallabag",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Search Wallabag",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Wallabag": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Wallabag": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-02-06T02:39:00.000Z",
+  "versionId": "3"
+}

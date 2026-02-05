@@ -1,14 +1,15 @@
 {
   "name": "qq-bot-signature-service",
-  "version": "1.0.0",
-  "description": "QQ Bot Ed25519 Signature Service",
+  "version": "1.1.0",
+  "description": "QQ Bot Ed25519 Signature Service with tweetnacl",
   "main": "qq-bot-signature-service.js",
   "scripts": {
     "start": "node qq-bot-signature-service.js"
   },
   "dependencies": {
-    "express": "^4.22.1",
-    "sodium-native": "^4.3.3"
+    "express": "^4.18.2",
+    "tweetnacl": "^1.2.1",
+    "tweetnacl-util": "^0.9.0"
   },
   "engines": {
     "node": ">=16.x"

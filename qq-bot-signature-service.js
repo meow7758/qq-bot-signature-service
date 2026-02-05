@@ -2,7 +2,8 @@
 // 部署到 Railway, Render 或其他 Node.js 托管服务
 
 const express = require('express');
-const crypto = require('crypto');
+const nacl = require('tweetnacl');
+const util = require('tweetnacl-util');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -35,10 +36,8 @@ app.post('/qq-bot-callback', (req, res) => {
     console.log('  event_ts:', eventTs);
     console.log('  Bot Secret:', QQ_BOT_SECRET);
 
-    // 生成 Ed25519 签名
-    const sodium = require('sodium-native');
-
-    // 生成 32 字节 seed - 按照文档 repeat 直到达到 32 字节
+    // 生成 Ed25519 签名 - 使用 tweetnacl
+    // 生成 32 字节 seed
     let seed = QQ_BOT_SECRET;
     while (seed.length < 32) {
       seed = seed + seed;
@@ -48,25 +47,21 @@ app.post('/qq-bot-callback', (req, res) => {
     console.log('  Generated seed:', seed);
     console.log('  Seed length:', seed.length);
 
-    const seedBuffer = Buffer.from(seed, 'utf8');
+    // 使用 tweetnacl 生成密钥对
+    const keyPair = nacl.sign.keyPair.fromSeed(util.decodeUTF8(seed));
 
-    // 生成 Ed25519 密钥对
-    const publicKey = Buffer.alloc(sodium.crypto_sign_PUBLICKEYBYTES);
-    const secretKey = Buffer.alloc(sodium.crypto_sign_SECRETKEYBYTES);
-    sodium.crypto_sign_seed_keypair(publicKey, secretKey, seedBuffer);
-
-    console.log('  Public key:', publicKey.toString('hex'));
-    console.log('  Secret key:', secretKey.toString('hex').substring(0, 32) + '...');
+    console.log('  Public key:', util.encodeBase64(keyPair.publicKey));
+    console.log('  Secret key:', util.encodeBase64(keyPair.secretKey).substring(0, 32) + '...');
 
     // 签名内容: event_ts + plain_token
-    const message = Buffer.from(eventTs + plainToken);
+    const message = util.decodeUTF8(eventTs + plainToken);
     console.log('  Message to sign:', eventTs + plainToken);
 
-    const signature = Buffer.alloc(sodium.crypto_sign_BYTES);
-    sodium.crypto_sign_detached(signature, message, secretKey);
+    // 生成签名
+    const signature = nacl.sign.detached(message, keyPair.secretKey);
 
-    // 转换为十六进制
-    const signatureHex = signature.toString('hex');
+    // 转换为十六进制字符串（128个字符）
+    const signatureHex = Buffer.from(signature).toString('hex');
 
     console.log('  Generated signature:', signatureHex);
     console.log('  Signature length:', signatureHex.length);

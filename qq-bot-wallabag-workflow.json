@@ -1,0 +1,225 @@
+{
+  "name": "QQ Bot Wallabag Integration",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "qq-bot-wallabag",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-trigger",
+      "name": "QQ Bot Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// QQ 机器人签名验证\n// QQ 机器人平台会发送 X-Signature 头部\n// 格式: sha256=hex_signature\n// 签名算法: hmac-sha256(token, raw_body)\n\nconst crypto = require('crypto');\n\n// 您在 QQ 平台配置的 Token\nconst QQ_BOT_TOKEN = 'your-qq-bot-token'; // 需要从 QQ 平台获取\n\n// 获取请求头中的签名\nconst signature = $input.item.json.headers['x-signature'] || $input.item.json.headers['X-Signature'];\n\n// 获取原始请求体（需要原始 JSON 字符串）\nconst rawBody = $input.item.json.body;\nconst bodyString = JSON.stringify(rawBody);\n\n// 计算期望的签名\nconst expectedSignature = 'sha256=' + crypto\n  .createHmac('sha256', QQ_BOT_TOKEN)\n  .update(bodyString)\n  .digest('hex');\n\n// 验证签名\nif (signature !== expectedSignature) {\n  console.log('Signature verification failed');\n  console.log('Received:', signature);\n  console.log('Expected:', expectedSignature);\n  \n  // 签名验证失败，返回错误\n  return {\n    json: {\n      code: 1,\n      message: 'Invalid signature',\n      verified: false\n    }\n  };\n}\n\n// 签名验证成功，继续处理\nconsole.log('Signature verified successfully');\n\n// 解析 QQ 机器人事件\nconst eventType = rawBody.type; // 1=C2C私聊, 2=群聊\nconst eventType2 = rawBody.eventType;\n\nreturn {\n  json: {\n    verified: true,\n    eventType,\n    eventType2,\n    rawData: rawBody\n  }\n};"
+      },
+      "id": "verify-signature",
+      "name": "Verify Signature",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [440, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.verified }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "check-verified",
+      "name": "Check Verified",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [640, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// 解析消息内容和用户意图\nconst rawData = $json.rawData;\n\n// 提取消息类型和内容\nlet messageContent = '';\nlet userId = '';\nlet guildId = '';\nlet channelId = '';\n\n// QQ 机器人事件类型\n// type 1 = C2C 私聊消息\n// type 2 = 群聊消息\nconst eventType = rawData.type;\n\nif (eventType === 1) {\n  // C2C 私聊\n  messageContent = rawData.content || '';\n  userId = rawData.openid || '';\n} else if (eventType === 2) {\n  // 群聊\n  messageContent = rawData.content || '';\n  userId = rawData.author?.id || '';\n  guildId = rawData.guild_id || '';\n  channelId = rawData.channel_id || '';\n}\n\n// 判断用户意图\nlet intent = 'unknown';\nlet url = '';\nlet keyword = '';\n\n// 检查是否包含链接\nconst urlMatch = messageContent.match(/(https?:\\/\\/[^\\s]+)/);\nif (urlMatch) {\n  intent = 'save';\n  url = urlMatch[1];\n}\n// 检查搜索意图\nelse if (messageContent.includes('搜索') || messageContent.includes('search') || messageContent.includes('查找')) {\n  intent = 'search';\n  // 提取搜索关键词\n  keyword = messageContent\n    .replace(/搜索|查找|search/g, '')\n    .trim();\n}\n// 检查保存意图（明确说明）\nelse if (messageContent.includes('保存') || messageContent.includes('save')) {\n  intent = 'save';\n  if (urlMatch) {\n    url = urlMatch[1];\n  }\n}\n\nreturn {\n  json: {\n    intent,\n    url,\n    keyword,\n    messageContent,\n    userId,\n    guildId,\n    channelId,\n    eventType\n  }\n};"
+      },
+      "id": "parse-intent",
+      "name": "Parse Intent",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [840, 200]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.intent }}",
+              "value2": "save"
+            }
+          ]
+        }
+      },
+      "id": "route-intent",
+      "name": "Route Intent",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [1040, 200]
+    },
+    {
+      "parameters": {
+        "url": "=https://wallabag.meowlove.cn/api/entries.json",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { url: $json.url } }}",
+        "options": {}
+      },
+      "id": "wallabag-save",
+      "name": "Save to Wallabag",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1240, 100]
+    },
+    {
+      "parameters": {
+        "url": "=https://wallabag.meowlove.cn/api/entries.json",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { search: $json.keyword || '' } }}",
+        "options": {}
+      },
+      "id": "wallabag-search",
+      "name": "Search Wallabag",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [1240, 300]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  code: 0,\n  message: $json.intent === 'save' ? '文章已保存到 Wallabag!' : `搜索完成，找到相关文章`,\n  intent: $json.intent\n} }}"
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1440, 200]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  code: 1,\n  message: '抱歉，我不理解您的指令。试试发送「保存 https://example.com」或「搜索 关键词」'\n} }}"
+      },
+      "id": "respond-error",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1240, 400]
+    }
+  ],
+  "connections": {
+    "QQ Bot Webhook": {
+      "main": [
+        [
+          {
+            "node": "Verify Signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Signature": {
+      "main": [
+        [
+          {
+            "node": "Check Verified",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Verified": {
+      "main": [
+        [
+          {
+            "node": "Parse Intent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse Intent": {
+      "main": [
+        [
+          {
+            "node": "Route Intent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Intent": {
+      "main": [
+        [
+          {
+            "node": "Save to Wallabag",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Search Wallabag",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Wallabag": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Search Wallabag": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-02-06T02:13:00.000Z",
+  "versionId": "1"
+}

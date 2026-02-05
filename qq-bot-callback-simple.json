@@ -1,0 +1,42 @@
+{
+  "name": "QQ Bot Callback Simple",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "qq-bot-callback",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300],
+      "id": "webhook-1"
+    },
+    {
+      "parameters": {
+        "functionCode": "const body = $input.item.json.body;\nif (body.op === 13) {\n  return {json: {plain_token: body.d.plain_token, signature: 'test-sig-' + body.d.event_ts}};\n}\nreturn {json: {msg: 'ok'}};"
+      },
+      "name": "Handler",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [440, 300],
+      "id": "handler-1"
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {}
+}

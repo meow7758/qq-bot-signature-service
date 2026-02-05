@@ -1,0 +1,166 @@
+{
+  "name": "QQ Bot Callback Handler",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "qq-bot-callback",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-node",
+      "name": "QQ事件接收",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [250, 300],
+      "webhookId": "qq-bot-callback-handler"
+    },
+    {
+      "parameters": {
+        "functionCode": "// 解析 QQ 机器人事件\nconst body = $input.item.json.body;\nconst eventType = body.type;\n\n// 提取消息内容\nlet messageContent = '';\nlet userId = '';\nlet guildId = '';\nlet channelId = '';\n\nif (eventType === 1) {\n  // C2C 私聊消息\n  messageContent = body.content;\n  userId = body.openid;\n} else if (eventType === 2) {\n  // 群聊消息\n  messageContent = body.content;\n  userId = body.author.id;\n  guildId = body.guild_id;\n  channelId = body.channel_id;\n} else if (eventType === 0) {\n  // 平台事件推送验证\n  return {\n    json: {\n      type: 'verification',\n      data: body\n    }\n  };\n}\n\n// 判断用户意图\nlet intent = 'unknown';\nif (messageContent.includes('保存') || messageContent.includes('save')) {\n  intent = 'save';\n} else if (messageContent.includes('搜索') || messageContent.includes('search') || messageContent.includes('查找')) {\n  intent = 'search';\n} else if (messageContent.includes('http')) {\n  // 包含链接，默认为保存\n  intent = 'save';\n}\n\n// 提取 URL（如果是保存操作）\nlet url = '';\nif (intent === 'save') {\n  const urlMatch = messageContent.match(/(https?:\\/\\/[^\\s]+)/);\n  if (urlMatch) {\n    url = urlMatch[1];\n  }\n}\n\nreturn {\n  json: {\n    eventType,\n    intent,\n    messageContent,\n    userId,\n    guildId,\n    channelId,\n    url,\n    rawEvent: body\n  }\n};"
+      },
+      "id": "parse-event",
+      "name": "解析事件",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [450, 300]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.intent }}",
+              "value2": "save",
+              "operation": "equals"
+            }
+          ]
+        }
+      },
+      "id": "switch-save",
+      "name": "路由判断",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [650, 300]
+    },
+    {
+      "parameters": {
+        "url": "https://n8n.meowlove.cn/webhook/wallabag-save",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { url: $json.url } }}",
+        "options": {}
+      },
+      "id": "save-to-wallabag",
+      "name": "保存到Wallabag",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 200],
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "wallabag-token-credential",
+          "name": "Wallabag Token"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "url": "https://n8n.meowlove.cn/webhook/wallabag-search",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { keyword: $json.messageContent.replace(/保存|搜索|查找/g, '').trim() } }}",
+        "options": {}
+      },
+      "id": "search-wallabag",
+      "name": "搜索Wallabag",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [850, 400]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ {\n  code: 0,\n  message: $json.intent === 'save' ? '文章已保存' : '搜索完成',\n  data: $json\n} }}"
+      },
+      "id": "response-node",
+      "name": "返回响应",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1050, 300]
+    }
+  ],
+  "connections": {
+    "QQ事件接收": {
+      "main": [
+        [
+          {
+            "node": "解析事件",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "解析事件": {
+      "main": [
+        [
+          {
+            "node": "路由判断",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "路由判断": {
+      "main": [
+        [
+          {
+            "node": "保存到Wallabag",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "搜索Wallabag",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "保存到Wallabag": {
+      "main": [
+        [
+          {
+            "node": "返回响应",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "搜索Wallabag": {
+      "main": [
+        [
+          {
+            "node": "返回响应",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-02-06T02:13:00.000Z",
+  "versionId": "1"
+}

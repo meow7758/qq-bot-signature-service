@@ -1,0 +1,49 @@
+{
+  "name": "QQ Bot Simple Test",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "qq-bot-test",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// 简单的测试响应\nconst body = $input.item.json.body;\n\nconsole.log('Received:', JSON.stringify(body));\n\n// 处理 QQ 回调验证 (OpCode 13)\nif (body.op === 13) {\n  return {\n    json: {\n      plain_token: body.d.plain_token,\n      signature: 'test-signature'\n    }\n  };\n}\n\nreturn {\n  json: {\n    message: 'Received event',\n    op: body.op\n  }\n};"
+      },
+      "id": "handler",
+      "name": "Handler",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [440, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-02-06T02:50:00.000Z",
+  "versionId": "simple-test"
+}

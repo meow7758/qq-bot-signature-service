@@ -1,0 +1,49 @@
+{
+  "name": "QQ Bot Debug - 回调验证测试",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "qq-bot-debug",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "functionCode": "// 记录所有请求数据用于调试\nconst body = $input.item.json.body;\nconst headers = $input.item.json.headers || {};\n\nconsole.log('=== QQ Bot Debug Info ===');\nconsole.log('Full body:', JSON.stringify(body, null, 2));\nconsole.log('OpCode:', body.op);\nconsole.log('Event type:', body.t);\nconsole.log('Headers:', JSON.stringify(headers, null, 2));\n\n// 处理回调验证 (OpCode 13)\nif (body.op === 13) {\n  const plainToken = body.d?.plain_token;\n  const eventTs = body.d?.event_ts;\n  \n  console.log('Validation request detected');\n  console.log('plain_token:', plainToken);\n  console.log('event_ts:', eventTs);\n  \n  // 返回 QQ 要求的格式\n  return {\n    json: {\n      plain_token: plainToken,\n      signature: 'temp-signature-' + eventTs\n    }\n  };\n}\n\n// 其他事件\nreturn {\n  json: {\n    message: 'Event received',\n    op: body.op,\n    type: body.t,\n    data: body.d\n  }\n};"
+      },
+      "id": "debug-handler",
+      "name": "Debug Handler",
+      "type": "n8n-nodes-base.function",
+      "typeVersion": 1,
+      "position": [440, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Debug Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-02-06T02:39:00.000Z",
+  "versionId": "debug"
+}

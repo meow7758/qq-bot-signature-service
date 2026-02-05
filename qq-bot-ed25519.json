@@ -1,0 +1,49 @@
+{
+  "name": "QQ Bot Wallabag - Ed25519",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "qq-bot-wallabag",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "webhook",
+      "name": "QQ Bot Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1.1,
+      "position": [240, 300]
+    },
+    {
+      "parameters": {
+        "jsCode": "// QQ 机器人 Ed25519 签名验证\n// 使用 tweetnacl 库\n\nconst nacl = require('tweetnacl');\nconst util = require('tweetnacl-util');\n\nconst QQ_BOT_SECRET = 'SYfmu2AJScmx8KWjw9Nbq5Lbs9Rj1Kdx';\n\nconst body = $input.item.json.body;\n\nconsole.log('Received op:', body.op);\n\n// 回调地址验证 (OpCode 13)\nif (body.op === 13) {\n  const plainToken = body.d.plain_token;\n  const eventTs = body.d.event_ts;\n  \n  console.log('Validation request:');\n  console.log('  plain_token:', plainToken);\n  console.log('  event_ts:', eventTs);\n  \n  // 生成 Ed25519 密钥对\n  // 根据 Bot Secret 生成 32 字节 seed\n  let seed = QQ_BOT_SECRET;\n  while (seed.length < 32) {\n    seed += seed;\n  }\n  seed = seed.substring(0, 32);\n  \n  // 将字符串转换为 Uint8Array\n  const seedBytes = util.decodeUTF8(seed);\n  \n  // 生成密钥对\n  const keyPair = nacl.sign.keyPair.fromSeed(seedBytes);\n  \n  // 签名内容: event_ts + plain_token\n  const message = eventTs + plainToken;\n  const messageBytes = util.decodeUTF8(message);\n  \n  // 生成签名\n  const signatureBytes = nacl.sign.detached(messageBytes, keyPair.secretKey);\n  \n  // 转换为十六进制字符串\n  const signature = util.encodeBase64(signatureBytes);\n  \n  console.log('Generated signature:', signature);\n  \n  // 返回 QQ 要求的格式\n  return {\n    json: {\n      plain_token: plainToken,\n      signature: signature\n    }\n  };\n}\n\n// 常规事件处理\nreturn {\n  json: {\n    message: 'Event received',\n    op: body.op,\n    type: body.t\n  }\n};"
+      },
+      "id": "ed25519-sign",
+      "name": "Ed25519 Signature",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 300]
+    }
+  ],
+  "connections": {
+    "QQ Bot Webhook": {
+      "main": [
+        [
+          {
+            "node": "Ed25519 Signature",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "tags": [],
+  "triggerCount": 0,
+  "updatedAt": "2026-02-06T02:43:00.000Z",
+  "versionId": "ed25519"
+}
