@@ -1,0 +1,16 @@
+{
+  "name": "qq-bot-signature-service",
+  "version": "1.0.0",
+  "description": "QQ Bot Ed25519 Signature Service",
+  "main": "qq-bot-signature-service.js",
+  "scripts": {
+    "start": "node qq-bot-signature-service.js"
+  },
+  "dependencies": {
+    "express": "^4.22.1",
+    "sodium-native": "^4.3.3"
+  },
+  "engines": {
+    "node": ">=16.x"
+  }
+}
